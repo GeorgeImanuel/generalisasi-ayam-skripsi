@@ -41,6 +41,12 @@ __pycache__/
 .ultralytics/
 reports/_ultra_val/
 
+# ===== Log / PID sementara =====
+finetune_out.log
+finetune_err.log
+finetune.pid
+*.tmp
+
 # ===== OS =====
 Thumbs.db
 .DS_Store

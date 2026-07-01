@@ -110,8 +110,9 @@ def main() -> None:
     st.title("🐔 Dashboard Generalisasi Broiler — Baseline vs MOWA + Anomali")
 
     eval_base = load_json(REPORTS / "eval_baseline.json")
-    eval_mowa = load_json(REPORTS / "eval_mowa.json")
-    ab = load_json(REPORTS / "ab_comparison.json")
+    # Utamakan hasil fine-tune (kondisi B') bila ada; jika tidak, MOWA apa adanya (B).
+    eval_mowa = load_json(REPORTS / "eval_mowa_ft.json") or load_json(REPORTS / "eval_mowa.json")
+    ab = load_json(REPORTS / "ab_comparison_ft.json") or load_json(REPORTS / "ab_comparison.json")
     ens = load_json(REPORTS / "anomaly_ensemble_summary.json")
     ens_cmp = load_json(REPORTS / "anomaly_method_comparison.json")
 

@@ -182,16 +182,33 @@ tab **Baseline / MOWA / Anomali / Metrik**.
 
 ---
 
-## 6. Catatan Metodologi
+## 6. Hasil Eksperimen A/B (ringkas)
 
-- **A/B adil:** label ikut di-warp (mode `warp`), jadi penurunan/kenaikan mAP mencerminkan efek
+Model: YOLOv8m PIO. Metrik primer mAP50-95. Tiga kondisi:
+
+| Dataset | A: baseline | B: MOWA apa adanya | B': MOWA + fine-tune |
+|---------|-------------|--------------------|-----------------------|
+| PIO val | 0.710 | 0.638 | **0.683** |
+| broiler_instance_seg | 0.536 | 0.457 | **0.530** |
+| chicken_detection_fum | 0.058 | 0.049 | **0.058** |
+| **mean Δ vs A** | — | **−0.053** | **−0.011** |
+
+**Kesimpulan:** MOWA rectification sebagai praproses **tidak mengalahkan baseline**. Diuji apa
+adanya, MOWA lebih buruk (−0.053) karena detektor dilatih pada gambar asli (domain mismatch).
+Setelah fine-tune "rectify-both", ~79% kerugian pulih (−0.011) tetapi tetap sedikit di bawah
+baseline. Ini sejalan dengan literatur (WoodScape/FisheyeYOLO): untuk kamera berdistorsi ringan,
+undistortion tidak andal meningkatkan detektor modern. **Hasil negatif yang valid** untuk skripsi.
+
+## 7. Catatan Metodologi
+
+- **A/B adil:** label ikut di-warp (mode `warp`), jadi perubahan mAP mencerminkan efek
   rectification, bukan misalignment label. Box yang ter-warp keluar frame (FOV trim) dibuang.
 - **Dataset external beda domain** dari data latih PIO; angka absolut rendah = sinyal
   generalisasi, bukan bug.
 - **Anomali tanpa ground-truth:** "terbaik" dinilai dari stabilitas rate & kesepakatan antar
   metode, bukan akurasi terhadap label anomali (yang tidak tersedia).
 
-## 7. Lisensi & Kredit
+## 8. Lisensi & Kredit
 
 - MOWA: KangLiao929/MOWA, **S-Lab License 1.0 (non-komersial)**.
 - Standar berat: Cobb500 Broiler Performance Supplement 2022.
