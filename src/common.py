@@ -13,7 +13,19 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 
-ROOT = Path(__file__).resolve().parents[1]
+def _find_repo_root(start: Path) -> Path:
+    """Cari root repo yang berisi folder `data/` (atau `.git`), naik dari lokasi file ini.
+
+    Robust terhadap lokasi script: baik saat berada di `configs/scripts/` maupun setelah
+    dipindah ke `src/`. Fallback ke parents[1] jika tak ketemu.
+    """
+    for parent in [start, *start.parents]:
+        if (parent / "data").is_dir() or (parent / ".git").is_dir():
+            return parent
+    return start.parents[1] if len(start.parents) >= 2 else start
+
+
+ROOT = _find_repo_root(Path(__file__).resolve())
 DATA_DIR = ROOT / "data"
 CONFIG_DIR = ROOT / "configs"
 FEATURE_DIR = ROOT / "features"

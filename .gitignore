@@ -1,9 +1,46 @@
-# Raw image dataset (too large for git)
+# ===== Dataset & hasil besar (tidak untuk git) =====
 /data/
+/train model/
+/wheels/
 
-# Reference papers (downloaded PDFs, not project output)
+# ===== Dependensi / model vendor (di-clone terpisah) =====
+/vendor/
+/.venv/
+/.venv-mowa/
+/.venv-yolo/
+**/.venv/
+
+# ===== Bobot & checkpoint model =====
+*.pt
+*.pth
+*.onnx
+*.engine
+*.whl
+
+# ===== Paper referensi (PDF, bukan output proyek) =====
 configs/*.pdf
+/papers/
+*.pdf
 
-# Python bytecode cache
+# ===== Data turunan besar (regenerasi via pipeline; jangan commit) =====
+/features/
+# report CSV besar (ratusan MB); simpan hanya ringkasan kecil di whitelist bawah
+reports/anomalies_consensus.csv
+reports/anomalies_individual.csv
+reports/overlays/
+reports/plots/
+reports/_ultra_val/
+
+# ===== Cache Python =====
 __pycache__/
 *.pyc
+*.pyo
+
+# ===== Tooling lokal =====
+.claude/
+.ultralytics/
+reports/_ultra_val/
+
+# ===== OS =====
+Thumbs.db
+.DS_Store
