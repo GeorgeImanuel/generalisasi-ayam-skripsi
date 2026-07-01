@@ -1,0 +1,9 @@
+# Raw image dataset (too large for git)
+/data/
+
+# Reference papers (downloaded PDFs, not project output)
+configs/*.pdf
+
+# Python bytecode cache
+__pycache__/
+*.pyc

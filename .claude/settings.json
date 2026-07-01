@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la data/)",
+      "Bash(ls data/data)",
+      "Bash(ls data/data/external)",
+      "Bash(ls data/external)",
+      "Bash(python -c \"from pathlib import Path; print\\(Path\\('configs/scripts/common.py'\\).resolve\\(\\).parents[1]\\)\")",
+      "Bash(python -c \"from pathlib import Path; print\\('ROOT =', Path\\('configs/scripts/common.py'\\).resolve\\(\\).parents[1]\\); print\\('DATA_DIR =', Path\\('configs/scripts/common.py'\\).resolve\\(\\).parents[1] / 'data'\\)\")",
+      "Bash(python scripts/extract_external_bbox_features.py --dataset nestler_yolo)",
+      "Bash(python scripts/extract_external_bbox_features.py --config \"C:/Users/ACER/AppData/Local/Temp/claude/d--KULI-ah-ayam-skripsi-generalisasi-data/71d9994e-351c-4431-b319-e960c4bd02ff/scratchpad/restore_nestler.json\" --dataset nestler_yolo)",
+      "Bash(ls -la .claude)",
+      "Bash(ls -la configs)",
+      "Bash(ls -la data)",
+      "Bash(cat .gitignore)",
+      "Bash(mkdir -p \"/c/Users/ACER/AppData/Local/Temp/claude/d--KULI-ah-ayam-skripsi-generalisasi-data/e53747b1-f287-4c8c-a5a3-d5c4dd1d2e75/scratchpad\")",
+      "Bash(mv configs/.git \"/c/Users/ACER/AppData/Local/Temp/claude/d--KULI-ah-ayam-skripsi-generalisasi-data/e53747b1-f287-4c8c-a5a3-d5c4dd1d2e75/scratchpad/configs_git_backup\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
+    ]
+  }
+}
