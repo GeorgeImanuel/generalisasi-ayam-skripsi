@@ -30,6 +30,9 @@ reports/anomalies_individual.csv
 reports/overlays/
 reports/plots/
 reports/_ultra_val/
+# Panel A/B/B' per-gambar (~728MB, regenerasi via compare_condition_panels.py);
+# hanya simpan *_summary_grid.png + run.log di top-level folder ini
+/reports/condition_panels/*/
 
 # ===== Cache Python =====
 __pycache__/
