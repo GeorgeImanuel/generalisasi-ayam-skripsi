@@ -33,6 +33,13 @@ reports/_ultra_val/
 # Panel A/B/B' per-gambar (~728MB, regenerasi via compare_condition_panels.py);
 # hanya simpan *_summary_grid.png + run.log di top-level folder ini
 /reports/condition_panels/*/
+# Output eksperimen MOWA v2 (regenerasi via skrip src/ baru; jangan commit yang berat)
+/reports/bbox_integrity/
+/reports/bbox_integrity_panels/
+/reports/straightness/
+/data/rectified/
+/data/enhanced/
+/data/augmented/
 
 # ===== Cache Python =====
 __pycache__/
