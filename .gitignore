@@ -64,3 +64,7 @@ Thumbs.db
 # Whitelist ringkasan kecil (angka kunci), tetap abaikan CSV/PNG berat di dalamnya
 !/reports/bbox_integrity/bbox_integrity_summary.json
 !/reports/straightness/*_summary.json
+
+# Scratch driver/log retrain radial (Task 3d, koordinator)
+/reports/_radial_retrain*
+/reports/_run_radial_retrain.py

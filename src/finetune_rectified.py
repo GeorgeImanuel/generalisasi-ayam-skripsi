@@ -13,9 +13,16 @@ Script ini fine-tune bobot terbaik (default YOLOv8m PIO) pada:
 Lalu bobot hasil dievaluasi ulang oleh src/eval_detection.py (kondisi B').
 
 Pemakaian:
+  # (1) Fine-tune rectify-both PIO (perilaku default, build_yaml PIO-rectified):
   .venv-yolo/Scripts/python.exe src/finetune_rectified.py \
       --weights "train model/runs_compare/cmp_yolov8m/weights/best.pt" \
       --epochs 40
+
+  # (2) Retrain augmentasi radial (pakai data.yaml eksternal apa adanya):
+  .venv-yolo/Scripts/python.exe src/finetune_rectified.py \
+      --weights "train model/runs_compare/cmp_yolov8m/weights/best.pt" \
+      --data data/augmented/pio_train_radial/_radial_pio.yaml \
+      --project "train model/runs_radial" --name ft_radial_yolov8m --epochs 40
 """
 from __future__ import annotations
 
@@ -27,11 +34,13 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def build_yaml(out_path: Path) -> Path:
+def build_yaml(out_path: Path, val_dir: Path | None = None) -> Path:
+    # val_dir: override opsional direktori gambar val (default pio_val/images).
+    val_path = val_dir if val_dir is not None else ROOT / "data" / "rectified" / "pio_val" / "images"
     cfg = {
         "path": str(ROOT),
         "train": [str(ROOT / "data" / "rectified" / "pio_train" / "images")],
-        "val": [str(ROOT / "data" / "rectified" / "pio_val" / "images")],
+        "val": [str(val_path)],
         "nc": 1,
         "names": {0: "pollo"},
     }
@@ -52,11 +61,23 @@ def main() -> int:
     ap.add_argument("--project", type=Path, default=ROOT / "train model" / "runs_rectified")
     ap.add_argument("--resume", action="store_true",
                     help="Lanjutkan dari last.pt run sebelumnya bila ada (tahan terhadap interupsi).")
+    ap.add_argument("--data", type=Path, default=None,
+                    help="Path data.yaml eksternal. Bila diisi, dipakai apa adanya dan "
+                         "build_yaml PIO-rectified DILEWATI (mis. untuk retrain augmentasi radial).")
+    ap.add_argument("--val", type=Path, default=None,
+                    help="Override opsional direktori gambar val saat build_yaml default "
+                         "(hanya dipakai bila --data TIDAK diberikan).")
     args = ap.parse_args()
 
     from ultralytics import YOLO
 
-    data_yaml = build_yaml(ROOT / "data" / "rectified" / "_rectified_pio.yaml")
+    if args.data is not None:
+        data_yaml = args.data
+        if not data_yaml.exists():
+            raise SystemExit(f"[finetune] ERROR: data.yaml eksternal tidak ditemukan: {data_yaml}")
+        print(f"[finetune] pakai data.yaml EKSTERNAL apa adanya -> {data_yaml}")
+    else:
+        data_yaml = build_yaml(ROOT / "data" / "rectified" / "_rectified_pio.yaml", val_dir=args.val)
     last_ckpt = args.project / args.name / "weights" / "last.pt"
 
     if args.resume and last_ckpt.exists():
