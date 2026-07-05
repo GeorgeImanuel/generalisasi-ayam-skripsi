@@ -212,3 +212,76 @@ Perintah yang dijalankan koordinator (GPU). Path relatif terhadap root repo.
 
 Varian yang input-nya belum siap saat langkah 6 dijalankan akan tercatat dengan status
 dan dilewati tanpa menggagalkan kampanye; jalankan ulang langkah 6 setelah input lengkap.
+
+---
+
+## HASIL AKTUAL KAMPANYE (dijalankan 2026-07-05, RTX 4060)
+
+### Task 1 — Integritas bbox setelah MOWA (113.784 box, 3 dataset, full run)
+
+Sumber: `reports/bbox_integrity/bbox_integrity_summary.json`.
+
+| Dataset | n box | melebar | menyusut | ter-crop | hilang (drop) | widen_w median | fill_ratio mean |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| pio_val | 73.859 | 43.6% | 16.1% | 20.5% | 7.7% | 1.032 | 0.857 |
+| broiler_instance_seg | 10.570 | 31.8% | 15.5% | 16.2% | 1.7% | 1.026 | 0.851 |
+| chicken_detection_fum (dense) | 29.355 | 30.8% | 28.7% | 31.1% | 2.7% | 1.022 | 0.835 |
+| **overall (macro)** | **113.784** | **35.4%** | **20.1%** | **22.6%** | **5.8%** | — | ~0.85 |
+
+**Kesimpulan Task 1:** MOWA **mengubah geometri bbox secara nyata**. ~35% box melebar
+(median hanya ~2-3%, jadi pelebaran ringan) TETAPI **22.6% box ter-crop** dan **5.8% hilang**
+keluar frame — paling parah di FUM (dense, banyak ayam di tepi: 31% crop, 28% menyusut).
+`fill_ratio` turun ke ~0.85 → kotak jadi melengkung/miring, bukan AABB rapi. Ini konsisten
+dengan pola **mAP50 relatif aman tetapi mAP50-95 (lokalisasi ketat) turun**: MOWA masih
+menemukan burung, tetapi kotaknya tidak lagi presisi, dan burung tepi hilang.
+
+### Task 3b — Kelurusan garis (LSD): MOWA memang meluruskan
+
+Sumber: `reports/straightness/*_summary.json`. dResidual = residual(rectified) − residual(asli),
+**negatif = lebih lurus**: pio_val **−1.68**, broiler_instance_seg **−0.52**,
+chicken_detection_fum **−0.23**. Jadi MOWA benar secara geometris (meluruskan garis, terkuat
+di PIO yang distorsi barrel-nya paling nyata) — tetapi keuntungan geometris ini **tidak**
+berubah menjadi keuntungan deteksi (lihat Task 4).
+
+### Task 2 — MOWA bolak-balik (iterative) TIDAK konvergen
+
+Sumber: `data/rectified_iter2/*/mowa_iter_manifest.json`. Perpindahan piksel per pass
+(pass-1 → pass-2): pio_val **12.36 → 12.62**, broiler **5.39 → 5.42**, FUM **9.80 → 9.81**.
+Pass kedua menggeser piksel **sama besar** dengan pass pertama → **tidak menuju nol
+(tidak konvergen)**. Ini bukti empiris bahwa MOWA **men-distorsi ulang** output-nya sendiri,
+bukan menyempurnakannya — sesuai teori: MOWA single-pass, tidak dilatih untuk self-recursion,
+dan output-nya off-distribution bagi pass kedua. Iterasi juga **membuang hampir 2× lebih
+banyak box** (pio_val: 11.371 vs ~5.663 pada 1 pass).
+
+### Task 4 — Tabel master re-test 3 dataset (mAP50-95)
+
+Sumber: `reports/experiments_v2_master.{json,csv,html}`. Verdict = rata-rata Δ vs baseline,
+dead-band 0.005.
+
+| Varian | pio_val | broiler_instance_seg | chicken_detection_fum | mean Δ | verdict |
+|---|---:|---:|---:|---:|:--|
+| baseline | 0.7102 | 0.5355 | 0.0582 | — | acuan |
+| mowa_1pass | 0.6383 | 0.4565 | 0.0491 | **−0.0534** | worse |
+| mowa_1pass_ft (rectify-both) | 0.6833 | 0.5298 | 0.0582 | **−0.0109** | worse |
+| mowa_iter2 (2 pass) | 0.6018 | 0.3984 | 0.0456 | **−0.0861** | **worse (terburuk)** |
+| enhanced (MOWA + CLAHE+unsharp) | 0.6274 | 0.4177 | 0.0481 | **−0.0703** | worse |
+| enhanced_orig (CLAHE+unsharp saja, tanpa MOWA)* | 0.6901 | 0.4705 | 0.0562 | **−0.0286** | worse |
+| **tta (multi-scale+flip, tanpa MOWA)** | 0.7076 | **0.6409** | 0.0601 | **+0.0349** | **better** |
+
+*enhanced_orig: `reports/eval_enhanced_orig.json` (kontrol untuk mengisolasi efek CLAHE+unsharp murni).
+
+**Kesimpulan Task 4 (final):**
+1. **Setiap varian berbasis MOWA memperburuk deteksi.** Iterasi 2-pass adalah yang
+   **terburuk** (−0.086) — persis prediksi riset (blur + crop menumpuk, over-correction).
+2. **CLAHE+unsharp memperburuk**, baik di atas MOWA (−0.070) maupun pada gambar asli
+   (−0.029) — penajaman memperkuat artefak/derau, bukan memulihkan detail.
+3. **TTA (multi-scale + flip) adalah SATU-SATUNYA varian yang MENGALAHKAN baseline
+   (+0.035)**, dengan lonjakan besar di broiler_instance_seg (**+0.105**: 0.536 → 0.641).
+   Ini test-time murni, tanpa retrain, tanpa rektifikasi — arah yang jauh lebih menjanjikan
+   daripada rektifikasi fisheye untuk kamera berdistorsi ringan ini.
+
+**Rekomendasi untuk skripsi:** MOWA-rektifikasi tetap **hasil negatif yang valid dan kini
+diperkuat bukti geometris** (integritas bbox + non-konvergensi iteratif + kelurusan garis).
+Untuk peningkatan nyata, arahkan ke **TTA** dan/atau augmentasi distorsi-radial saat training
+(Task 3d, `radial_distort_augment.py`, belum di-retrain) — konsisten dengan WoodScape
+("adaptasi detektor, bukan rektifikasi naif").

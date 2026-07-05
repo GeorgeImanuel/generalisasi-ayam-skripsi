@@ -1,0 +1,34 @@
+{
+  "id": "pio_val",
+  "status": "completed",
+  "detector": "LSD",
+  "input_dir": "data\\images\\val",
+  "compare_dir": "data\\rectified\\pio_val\\images",
+  "n_images": 60,
+  "metric_notes": "curvature_residual = mean |jarak titik tepi ke sumbu-utama PCA| kontur line-like, dinormalisasi diagonal x1000 (px/1000px). LEBIH KECIL = LEBIH LURUS. mean_segment_len = fraksi diagonal. n_segments = jumlah segmen >= 0.03 x diagonal (LSD).",
+  "params": {
+    "canny": [
+      60,
+      160
+    ],
+    "blur_ksize": 5,
+    "min_seg_frac": 0.03,
+    "min_arc_frac": 0.06,
+    "min_contour_pts": 40,
+    "min_elongation": 0.9,
+    "residual_scale": 1000.0
+  },
+  "input": {
+    "mean_n_segments": 36.15,
+    "mean_segment_len": 0.04885771798258277,
+    "mean_curvature_residual": 5.529308784296733
+  },
+  "compare": {
+    "mean_n_segments": 34.15,
+    "mean_segment_len": 0.05242240316271486,
+    "mean_curvature_residual": 3.854001821025842,
+    "n_matched": 60
+  },
+  "mean_curvature_residual_delta": -1.6753069632708892,
+  "interpretation": "delta = compare - input pada curvature_residual. delta < 0 -> compare LEBIH LURUS (garis lebih lurus setelah rektifikasi). delta > 0 -> compare kurang lurus (indikasi over-/under-correction MOWA)."
+}

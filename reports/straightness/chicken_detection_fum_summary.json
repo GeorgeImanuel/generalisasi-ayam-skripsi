@@ -1,0 +1,34 @@
+{
+  "id": "chicken_detection_fum",
+  "status": "completed",
+  "detector": "LSD",
+  "input_dir": "data\\external\\chicken_detection_fum\\train\\images",
+  "compare_dir": "data\\rectified\\chicken_detection_fum\\images",
+  "n_images": 60,
+  "metric_notes": "curvature_residual = mean |jarak titik tepi ke sumbu-utama PCA| kontur line-like, dinormalisasi diagonal x1000 (px/1000px). LEBIH KECIL = LEBIH LURUS. mean_segment_len = fraksi diagonal. n_segments = jumlah segmen >= 0.03 x diagonal (LSD).",
+  "params": {
+    "canny": [
+      60,
+      160
+    ],
+    "blur_ksize": 5,
+    "min_seg_frac": 0.03,
+    "min_arc_frac": 0.06,
+    "min_contour_pts": 40,
+    "min_elongation": 0.9,
+    "residual_scale": 1000.0
+  },
+  "input": {
+    "mean_n_segments": 42.583333333333336,
+    "mean_segment_len": 0.039441998545213026,
+    "mean_curvature_residual": 3.399267614773722
+  },
+  "compare": {
+    "mean_n_segments": 44.46666666666667,
+    "mean_segment_len": 0.03973067498406272,
+    "mean_curvature_residual": 3.1677491472551322,
+    "n_matched": 60
+  },
+  "mean_curvature_residual_delta": -0.23151846751858993,
+  "interpretation": "delta = compare - input pada curvature_residual. delta < 0 -> compare LEBIH LURUS (garis lebih lurus setelah rektifikasi). delta > 0 -> compare kurang lurus (indikasi over-/under-correction MOWA)."
+}
