@@ -79,3 +79,8 @@ Thumbs.db
 
 # Node deps untuk build deck (regenerasi via npm install)
 /presentasi/node_modules/
+
+# Gambar B fine-tune full-res (regenerasi via render_bprime_full.py); simpan hanya summary
+/reports/bprime_full/*/
+/reports/_bprime_full.log
+!/reports/bprime_full/_summary.json
