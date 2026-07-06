@@ -68,3 +68,11 @@ Thumbs.db
 # Scratch driver/log retrain radial (Task 3d, koordinator)
 /reports/_radial_retrain*
 /reports/_run_radial_retrain.py
+
+# Round-trip metric: abaikan CSV/overlay berat, simpan hanya summary
+/reports/roundtrip/*.csv
+/reports/roundtrip/*.png
+!/reports/roundtrip/roundtrip_summary.json
+# Scratch: log/preview kampanye v3
+/reports/_roundtrip_full.log
+/reports/_chart_v3.png

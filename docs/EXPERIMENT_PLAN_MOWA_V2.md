@@ -285,3 +285,65 @@ diperkuat bukti geometris** (integritas bbox + non-konvergensi iteratif + keluru
 Untuk peningkatan nyata, arahkan ke **TTA** dan/atau augmentasi distorsi-radial saat training
 (Task 3d, `radial_distort_augment.py`, belum di-retrain) — konsisten dengan WoodScape
 ("adaptasi detektor, bukan rektifikasi naif").
+
+---
+
+## HASIL TAMBAHAN (2026-07-06): round-trip forward→inverse + retrain radial
+
+### Klarifikasi "MOWA bolak-balik" (via /deep-research)
+Yang dimaksud pembimbing BUKAN rectify berulang (iteratif, sudah diuji = terburuk −0.086),
+melainkan **forward→inverse round-trip**: X → MOWA rectify → Y (lurus) → **inverse-warp** → X'
+(kembali terdistorsi), lalu ukur |X'−X|. Nama baku: **inverse/backward warping** diukur dengan
+**round-trip / cycle-consistency reconstruction error**. Sitasi: CycleMorph (Kim dkk., Medical Image
+Analysis 2021, arXiv:2008.05772); Sánchez dkk. "Computing Inverse Optical Flow" (Pattern Recognition
+Letters 2015); Inverse Consistency Error (Christiansen & Johnson 2001); Warp Consistency (Truong dkk.,
+ICCV 2021, arXiv:2104.03308). MOWA **forward-only** (tak ada invers bawaan) → invers dibangun numerik
+dari flow prediksi (fixed-point `g(x)=−D(x+g(x))`). Skrip: `src/mowa_roundtrip_consistency.py`,
+`src/roundtrip_bbox_remap.py`.
+
+### Hasil round-trip metric (978 gambar, `reports/roundtrip/roundtrip_summary.json`)
+| Dataset | recon MAE (0-255) | PSNR (dB) | **hole_rate** |
+|---|---:|---:|---:|
+| pio_val | 7.13 | 27.5 | 7.94% |
+| broiler_instance_seg | 3.60 | 32.4 | 9.07% |
+| chicken_detection_fum | 6.99 | 24.9 | 7.29% |
+| **overall (978)** | **6.36** | **27.7** | **7.95%** |
+
+**Kesimpulan round-trip:** rektifikasi MOWA **tidak invertible/lossless** — rata-rata **~8% piksel
+tak bisa dikembalikan** (hole) saat inverse-warp, dan rekonstruksi X' berbeda dari X (MAE ~6/255,
+PSNR ~28 dB). Ini **bukti kuantitatif kerugian informasi** yang melengkapi Task 1 (bbox crop/widen):
+warp MOWA membuang informasi geometris yang tak dapat dipulihkan → konsisten dengan turunnya mAP.
+Nilai skripsi: round-trip = metrik diagnostik invertibilitas, BUKAN perbaikan akurasi.
+
+### Task 3d — Retrain augmentasi radial SELESAI (40 epoch, best epoch 29)
+Augmentasi distorsi radial acak pada train PIO (1035 gambar, `radial_distort_augment.py --copies 1`)
++ retrain YOLOv8m 40 epoch (`train model/runs_radial/ft_radial_yolov8m`). Eval 3 dataset
+(`reports/eval_radial.json`):
+
+| Dataset | baseline | **radial_retrain** | Δ |
+|---|---:|---:|---:|
+| pio_val | 0.7102 | 0.7039 | −0.006 |
+| broiler_instance_seg | 0.5355 | **0.6075** | **+0.072** |
+| chicken_detection_fum | 0.0582 | **0.0653** | **+0.007** |
+| **mean Δ** | — | — | **+0.024 (better)** |
+
+### TABEL MASTER FINAL (7 varian, `reports/experiments_v2_master.*`)
+| Varian | pio_val | broiler | fum | mean Δ | verdict |
+|---|---:|---:|---:|---:|:--|
+| baseline | 0.7102 | 0.5355 | 0.0582 | — | acuan |
+| **tta** | 0.7076 | 0.6409 | 0.0601 | **+0.035** | **better** |
+| **radial_retrain** | 0.7039 | 0.6075 | 0.0653 | **+0.024** | **better** |
+| mowa_1pass_ft | 0.6833 | 0.5298 | 0.0582 | −0.011 | worse |
+| mowa_1pass | 0.6383 | 0.4565 | 0.0491 | −0.053 | worse |
+| enhanced (MOWA+CLAHE) | 0.6274 | 0.4177 | 0.0481 | −0.070 | worse |
+| mowa_iter2 | 0.6018 | 0.3984 | 0.0456 | −0.086 | worse |
+
+**KESIMPULAN FINAL SKRIPSI:**
+1. **Semua varian berbasis rektifikasi MOWA memperburuk deteksi** (−0.011 s/d −0.086). Round-trip
+   membuktikan mengapa: warp MOWA tidak invertible (~8% info hilang) + merusak integritas bbox (Task 1).
+2. **DUA pendekatan MENGALAHKAN baseline, keduanya TANPA rektifikasi MOWA:** TTA multi-scale+flip
+   (+0.035, test-time gratis) dan **augmentasi distorsi radial + retrain (+0.024)**.
+3. Ini menegaskan tesis **WoodScape**: untuk kamera berdistorsi ringan, **adaptasi detektor**
+   (augmentasi/TTA) lebih efektif daripada **meluruskan gambar** (rektifikasi). Rektifikasi MOWA =
+   hasil negatif yang valid dan diperkuat bukti geometris (integritas bbox + non-invertibilitas
+   round-trip + non-konvergensi iteratif + kelurusan garis yang tak berbuah akurasi).

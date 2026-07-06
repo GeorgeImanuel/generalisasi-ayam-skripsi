@@ -136,8 +136,9 @@
 
   <div class="card">
     <h2>Δ mAP50-95 per dataset (matriks)</h2>
-    <p class="sub" style="margin-bottom:14px">Warna = besar &amp; arah Δ vs baseline per dataset. Sorotan: hanya <b>TTA</b>
-      yang biru (menang), dengan lonjakan besar di broiler (+0.105).</p>
+    <p class="sub" style="margin-bottom:14px">Warna = besar &amp; arah Δ vs baseline per dataset. Sorotan: <b>TTA</b> dan
+      <b>augmentasi radial + retrain</b> yang biru (menang) — keduanya tanpa rektifikasi MOWA, dengan lonjakan
+      besar di broiler (TTA +0.105, radial +0.072). Semua varian berbasis MOWA merah (kalah).</p>
     <div id="heat"></div>
     <p class="foot">Nilai = Δ absolut mAP50-95 (varian − baseline). Baris baseline semuanya 0 (acuan).</p>
   </div>
@@ -164,11 +165,12 @@ const BASE = {pio_val:0.71024, broiler_instance_seg:0.53553, chicken_detection_f
 const V = [
   {name:'baseline',                 lab:'Baseline',           tag:'gambar asli',              abs:{pio_val:0.71024,broiler_instance_seg:0.53553,chicken_detection_fum:0.05823}, mean:0.0,     verdict:'base'},
   {name:'tta',                      lab:'TTA (multi-scale+flip)', tag:'tanpa MOWA, tanpa retrain', abs:{pio_val:0.7076,broiler_instance_seg:0.6409,chicken_detection_fum:0.0601}, mean:0.03487, verdict:'better'},
+  {name:'radial_retrain',           lab:'Augmentasi radial + retrain', tag:'adapt detektor, tanpa MOWA', abs:{pio_val:0.7039,broiler_instance_seg:0.6075,chicken_detection_fum:0.0653}, mean:0.02423, verdict:'better'},
   {name:'mowa_1pass_ft',            lab:'MOWA + fine-tune',   tag:'rectify-both',             abs:{pio_val:0.6833,broiler_instance_seg:0.5298,chicken_detection_fum:0.0582}, mean:-0.01087, verdict:'worse'},
   {name:'enhanced_orig',            lab:'CLAHE+unsharp saja', tag:'tanpa MOWA',               abs:{pio_val:0.6901,broiler_instance_seg:0.4705,chicken_detection_fum:0.0562}, mean:-0.02905, verdict:'worse'},
   {name:'mowa_1pass',               lab:'MOWA 1-pass',        tag:'bobot baseline',           abs:{pio_val:0.6383,broiler_instance_seg:0.4565,chicken_detection_fum:0.0491}, mean:-0.05338, verdict:'worse'},
   {name:'enhanced',                 lab:'MOWA + CLAHE+unsharp', tag:'di atas MOWA',           abs:{pio_val:0.6274,broiler_instance_seg:0.4177,chicken_detection_fum:0.0481}, mean:-0.07025, verdict:'worse'},
-  {name:'mowa_iter2',               lab:'MOWA iteratif 2-pass', tag:'bolak-balik',            abs:{pio_val:0.6018,broiler_instance_seg:0.3984,chicken_detection_fum:0.0456}, mean:-0.08609, verdict:'worse'},
+  {name:'mowa_iter2',               lab:'MOWA iteratif 2-pass', tag:'rectify berulang',       abs:{pio_val:0.6018,broiler_instance_seg:0.3984,chicken_detection_fum:0.0456}, mean:-0.08609, verdict:'worse'},
 ];
 const fmt = x => (x>=0?'+':'−')+Math.abs(x).toFixed(3);
 const tt = document.getElementById('tt');

@@ -372,6 +372,64 @@
         "n_worse": 0,
         "n_neutral": 2
       }
+    },
+    {
+      "name": "radial_retrain",
+      "status": "ok",
+      "source": "eval",
+      "note": "Retrain dengan augmentasi distorsi radial (Unit 7), gambar asli.",
+      "weights": "C:\\Arib\\MASSA AYAM\\generalisasi-ayam-skripsi\\train model\\runs_radial\\ft_radial_yolov8m\\weights\\best.pt",
+      "rectified_root": null,
+      "datasets": {
+        "pio_val": {
+          "status": "ok",
+          "images": 452,
+          "map50": 0.89945,
+          "map50_95": 0.70388,
+          "precision": 0.95772,
+          "recall": 0.88707
+        },
+        "broiler_instance_seg": {
+          "status": "ok",
+          "images": 200,
+          "map50": 0.88099,
+          "map50_95": 0.6075,
+          "precision": 0.9092,
+          "recall": 0.83699
+        },
+        "chicken_detection_fum": {
+          "status": "ok",
+          "images": 326,
+          "map50": 0.13991,
+          "map50_95": 0.0653,
+          "precision": 0.49241,
+          "recall": 0.15548
+        }
+      },
+      "verdict": {
+        "per_dataset": [
+          {
+            "dataset": "pio_val",
+            "delta": -0.00636,
+            "label": "worse"
+          },
+          {
+            "dataset": "broiler_instance_seg",
+            "delta": 0.07197,
+            "label": "better"
+          },
+          {
+            "dataset": "chicken_detection_fum",
+            "delta": 0.00707,
+            "label": "better"
+          }
+        ],
+        "mean_delta_primary": 0.02423,
+        "overall": "better",
+        "n_better": 2,
+        "n_worse": 1,
+        "n_neutral": 0
+      }
     }
   ]
 }
