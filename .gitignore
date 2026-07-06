@@ -76,3 +76,6 @@ Thumbs.db
 # Scratch: log/preview kampanye v3
 /reports/_roundtrip_full.log
 /reports/_chart_v3.png
+
+# Node deps untuk build deck (regenerasi via npm install)
+/presentasi/node_modules/
