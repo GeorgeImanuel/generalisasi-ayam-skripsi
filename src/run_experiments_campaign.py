@@ -132,6 +132,41 @@ def build_variants(weights_baseline: Path, weights_ft: Path) -> List[Dict]:
             "merge_default": None,
             "note": "Retrain dengan augmentasi distorsi radial (Unit 7), gambar asli.",
         },
+        # --- Varian MOWA "soften/coarse/jaga-tepi" (catatan dosen #3/#4). Fase SCREEN
+        # memakai bobot baseline (tanpa retrain): ukur apakah pelemahan warp menurunkan
+        # penalti vs mowa_1pass (-0.053). Skip bila dir rectified belum digenerasi. ---
+        {
+            "name": "mowa_coarse",
+            "source": "eval",
+            "weights": weights_baseline,
+            "rectified_root": ROOT / "data" / "rectified_coarse",
+            "merge_default": None,
+            "note": "MOWA coarse-only (TPS, buang residual flow), bobot baseline.",
+        },
+        {
+            "name": "mowa_alpha05",
+            "source": "eval",
+            "weights": weights_baseline,
+            "rectified_root": ROOT / "data" / "rectified_alpha05",
+            "merge_default": None,
+            "note": "MOWA warp-alpha=0.5 (perlemah warp), bobot baseline.",
+        },
+        {
+            "name": "mowa_pad015",
+            "source": "eval",
+            "weights": weights_baseline,
+            "rectified_root": ROOT / "data" / "rectified_pad015",
+            "merge_default": None,
+            "note": "MOWA pad-frac=0.15 (jaga tepi, box tak dibuang), bobot baseline.",
+        },
+        {
+            "name": "mowa_coarse_sam",
+            "source": "eval",
+            "weights": weights_baseline,
+            "rectified_root": ROOT / "data" / "rectified_coarse_sam",
+            "merge_default": None,
+            "note": "MOWA coarse-only + label bbox via mask SAM (Lever B), bobot baseline.",
+        },
     ]
 
 

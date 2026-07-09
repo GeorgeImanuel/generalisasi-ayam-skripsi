@@ -24,13 +24,20 @@ CATATAN PENTING soal label:
   "rectify-test-only" tanpa menyadari domain mismatch train/test.
 
 Contoh pemakaian (dari root proyek, pakai venv khusus MOWA):
-  .venv-mowa/Scripts/python.exe configs/scripts/mowa_rectify.py \
+  .venv-mowa/Scripts/python.exe src/mowa_rectify.py \
       --input data/images/val \
       --labels data/labels/val \
       --output data/rectified/pio_val \
       --mowa-root vendor/MOWA \
       --checkpoint vendor/MOWA/checkpoint/mowa_pretrained.pth \
       --limit 20 --save-compare
+
+Knob pelemah/coarse/jaga-tepi (default = warp penuh seperti dulu; lihat argparse):
+  --coarse-only          pakai TPS coarse saja (buang residual flow padat)
+  --warp-alpha 0.5       perlemah warp 50% (0=identitas, 1=penuh)
+  --pad-frac 0.15        perbesar kanvas agar ayam/box tepi tak dibuang
+  --seg-labels DIR       warp bbox via poligon mask ayam (Lever B), bukan persegi
+  Contoh: ... --coarse-only --pad-frac 0.15 --output data/rectified_coarse/pio_val
 
 Struktur output:
   <output>/images/*.jpg         citra terkoreksi (resolusi asli)
@@ -156,19 +163,36 @@ def _identity_grid_xy(h: int, w: int, device: torch.device) -> torch.Tensor:
     return g
 
 
-def _resample_xy(feature: torch.Tensor, flow: torch.Tensor, mode: str = "bilinear") -> torch.Tensor:
+def _resample_xy(feature: torch.Tensor, flow: torch.Tensor, mode: str = "bilinear",
+                 out_hw: Optional[Tuple[int, int]] = None,
+                 offset: Tuple[int, int] = (0, 0)) -> torch.Tensor:
     """Setara resample_image_xy vendor tapi grid identitas di-cache & mode bebas.
 
     flow adalah BACKWARD map: untuk tiap pixel OUTPUT, uv = identitas + flow menunjuk
     posisi sampel di INPUT. Dinormalisasi ke [-1,1] lalu grid_sample.
+
+    out_hw/offset OPSIONAL (untuk padding kanvas, lihat _resample_padded):
+      - Bila out_hw is None dan offset==(0,0) -> jalur LAMA persis (nol drift).
+      - Bila diisi: grid output berukuran out_hw, koordinat identitasnya digeser
+        `-offset` (piksel output (X,Y) mewakili posisi logis (X-ox, Y-oy)), lalu
+        flow ditambahkan. Normalisasi TETAP memakai dimensi INPUT (w-1)/2,(h-1)/2 —
+        agar kanvas yang diperbesar bisa menyampel piksel input; koordinat di luar
+        input jatuh ke padding_mode='zeros' (margin hitam yang memang diinginkan).
     """
     b, _, h, w = feature.shape
-    uv = _identity_grid_xy(h, w, feature.device) + flow  # 1,2,H,W
     x0 = (w - 1) / 2.0
     y0 = (h - 1) / 2.0
+    if out_hw is None and offset == (0, 0):
+        uv = _identity_grid_xy(h, w, feature.device) + flow  # 1,2,H,W (jalur lama)
+    else:
+        oh, ow = out_hw if out_hw is not None else (h, w)
+        ident = _identity_grid_xy(oh, ow, feature.device).clone()  # 1,2,oh,ow
+        ident[:, 0, :, :] -= offset[0]
+        ident[:, 1, :, :] -= offset[1]
+        uv = ident + flow  # flow harus (1,2,oh,ow)
     nx = (uv[:, 0, :, :] - x0) / x0
     ny = (uv[:, 1, :, :] - y0) / y0
-    grid = torch.stack([nx, ny], dim=-1)  # 1,H,W,2
+    grid = torch.stack([nx, ny], dim=-1)  # 1,oh,ow,2
     if grid.shape[0] != b:
         grid = grid.expand(b, -1, -1, -1)
     return F.grid_sample(feature, grid, mode=mode, align_corners=True)
@@ -245,24 +269,69 @@ def compute_flows(net, input2_t: torch.Tensor, mask_t: torch.Tensor, ori_h: int,
     return tps2flow, flow
 
 
-def _apply_full_warp(feature: torch.Tensor, tps2flow: torch.Tensor, flow: torch.Tensor,
-                     mode: str) -> torch.Tensor:
+def _apply_full_warp(feature: torch.Tensor, tps2flow: torch.Tensor,
+                     flow: Optional[torch.Tensor], mode: str) -> torch.Tensor:
     """Terapkan dua tahap warp yang sama seperti vendor:
        output_tps = resample(feature, tps2flow); output = resample(output_tps, flow).
+
+    Bila flow is None -> kembalikan output_tps saja (mode COARSE-only / TPS-only,
+    membuang residual flow padat yang menjadi sumber distorsi lokal box). Semua
+    pemanggil lama mengirim `flow` nyata sehingga perilakunya tak berubah.
     """
     output_tps = _resample_xy(feature, tps2flow, mode=mode)
+    if flow is None:
+        return output_tps
     output = _resample_xy(output_tps, flow, mode=mode)
     return output
+
+
+def _combined_disp(tps2flow: torch.Tensor, flow: Optional[torch.Tensor],
+                   h: int, w: int, device: torch.device) -> torch.Tensor:
+    """Peta perpindahan GABUNGAN (backward) dari kedua tahap warp: Dcomb = M - identitas,
+    dengan M = _apply_full_warp(identitas). Untuk tiap piksel output p, M(p) adalah
+    koordinat sumber di INPUT (identik dengan compute_inverse_map di roundtrip_bbox_remap).
+    Return (1,2,H,W).
+    """
+    ident = _identity_grid_xy(h, w, device)
+    m = _apply_full_warp(ident, tps2flow, flow, mode="bilinear")  # 1,2,H,W koord sumber
+    return m - ident
+
+
+def _resample_padded(feature: torch.Tensor, dcomb: torch.Tensor,
+                     ox: int, oy: int, hp: int, wp: int, mode: str) -> torch.Tensor:
+    """Sampel `feature` (H×W) ke kanvas diperbesar Hp×Wp memakai peta gabungan `dcomb`.
+
+    dcomb (1,2,H,W) di-pad 'replicate' sebesar (ox,oy) menjadi (1,2,Hp,Wp) sehingga
+    margin baru mempertahankan perpindahan tepi (edge chickens tetap tersampel, bukan
+    dibuang). Lalu satu kali _resample_xy dgn out_hw=(Hp,Wp), offset=(ox,oy).
+
+    CATATAN: jalur ini menerapkan SATU interpolasi (bukan dua tahap seperti
+    _apply_full_warp); untuk piksel interior hasilnya setara M(p) karena dcomb sudah
+    memuat komposisi kedua tahap. Sedikit smoothing ekstra hanya di margin — dapat
+    diabaikan; jalur pad=0 tetap memakai _apply_full_warp dua-tahap yang eksak.
+    """
+    dpad = F.pad(dcomb, (ox, ox, oy, oy), mode="replicate")  # 1,2,Hp,Wp
+    return _resample_xy(feature, dpad, mode=mode, out_hw=(hp, wp), offset=(ox, oy))
 
 
 @torch.no_grad()
 def rectify_one(net, build_model_test, img_bgr: np.ndarray, device: torch.device,
                 tps_points: List[int], use_fp16: bool = True, legacy: bool = False,
-                boxes: Optional[np.ndarray] = None, tps_cap: int = 384):
+                boxes: Optional[np.ndarray] = None, tps_cap: int = 384,
+                warp_alpha: float = 1.0, coarse_only: bool = False,
+                pad_frac: float = 0.0,
+                masks: Optional[List[Optional[np.ndarray]]] = None):
     """Luruskan satu gambar BGR (uint8, resolusi asli) -> BGR uint8 rectified.
 
     Jika `boxes` diberikan (Nx4 xyxy pixel), sekaligus mengembalikan bbox hasil warp
     lewat instance-mask (lihat warp_boxes_via_flow). Return: (warp_np, warped_boxes|None).
+
+    Knob (default = perilaku lama persis):
+      warp_alpha  : skala kedua field perpindahan (1.0=penuh, 0=identitas) — memperlemah warp.
+      coarse_only : True -> pakai TPS coarse saja, buang residual flow padat.
+      pad_frac    : >0 -> perbesar kanvas keluaran (1+2p) agar konten/box tepi tak dibuang.
+      masks       : list poligon per-box (Nx2 piksel) untuk warp_boxes_via_flow (Lever B);
+                    None -> fallback rasterisasi persegi seperti sebelumnya.
 
     legacy=True memakai build_model_test vendor (untuk sanity-check numerik).
     """
@@ -289,36 +358,84 @@ def rectify_one(net, build_model_test, img_bgr: np.ndarray, device: torch.device
     tps2flow, flow = compute_flows(net, input2_t, mask_t, ori_h, ori_w, tps_points, device,
                                    use_fp16, tps_cap=tps_cap)
 
-    warp = _apply_full_warp(input1_t, tps2flow, flow, mode="bilinear")[0]
+    # Lever A: perlemah lalu (opsional) buang residual flow -> warp lebih coarse/mulus.
+    if warp_alpha != 1.0:
+        tps2flow = tps2flow * warp_alpha
+        if flow is not None:
+            flow = flow * warp_alpha
+    if coarse_only:
+        flow = None
+
+    # Lever "jaga tepi": kanvas diperbesar agar edge chickens tak keluar frame & dibuang.
+    if pad_frac and pad_frac > 0:
+        ox = int(round(pad_frac * ori_w))
+        oy = int(round(pad_frac * ori_h))
+        hp, wp = ori_h + 2 * oy, ori_w + 2 * ox
+        dcomb = _combined_disp(tps2flow, flow, ori_h, ori_w, device)
+        warp = _resample_padded(input1_t, dcomb, ox, oy, hp, wp, mode="bilinear")[0]
+        target_h, target_w = hp, wp
+    else:
+        ox = oy = 0
+        hp, wp = ori_h, ori_w
+        dcomb = None
+        warp = _apply_full_warp(input1_t, tps2flow, flow, mode="bilinear")[0]
+        target_h, target_w = ori_h, ori_w
+
     warp_np = (warp.clamp(0, 1) * 255.0).cpu().numpy().transpose(1, 2, 0).astype(np.uint8)
-    if warp_np.shape[:2] != (ori_h, ori_w):
-        warp_np = cv2.resize(warp_np, (ori_w, ori_h))
+    if warp_np.shape[:2] != (target_h, target_w):
+        warp_np = cv2.resize(warp_np, (target_w, target_h))
 
     warped_boxes = None
     if boxes is not None:
-        warped_boxes = warp_boxes_via_flow(boxes, tps2flow, flow, ori_h, ori_w, device)
+        warped_boxes = warp_boxes_via_flow(
+            boxes, tps2flow, flow, ori_h, ori_w, device,
+            masks=masks, dcomb=dcomb, pad=(ox, oy), out_hw=(hp, wp),
+        )
     return warp_np, warped_boxes
 
 
-def warp_boxes_via_flow(boxes: np.ndarray, tps2flow: torch.Tensor, flow: torch.Tensor,
-                        ori_h: int, ori_w: int, device: torch.device) -> List[Tuple[int, int, int, int, int]]:
+def warp_boxes_via_flow(boxes: np.ndarray, tps2flow: torch.Tensor,
+                        flow: Optional[torch.Tensor],
+                        ori_h: int, ori_w: int, device: torch.device,
+                        masks: Optional[List[Optional[np.ndarray]]] = None,
+                        dcomb: Optional[torch.Tensor] = None,
+                        pad: Tuple[int, int] = (0, 0),
+                        out_hw: Optional[Tuple[int, int]] = None,
+                        ) -> List[Tuple[int, int, int, int, int]]:
     """Warp bbox lewat instance-mask + flow yang SAMA dengan gambar.
 
     boxes: Nx4 (x1,y1,x2,y2) pixel pada gambar ASLI (input).
-    Metode: lukis tiap bbox sebagai persegi terisi ber-ID unik (i+1) pada peta
-    single-channel resolusi asli, lalu resample dengan mode NEAREST memakai
-    tps2flow lalu flow. Untuk tiap ID yang masih muncul di output, ambil
-    min/max x,y -> bbox rectified. ID yang hilang (ter-warp keluar frame) dibuang.
+    Metode: lukis tiap objek ber-ID unik (i+1) pada peta single-channel resolusi asli,
+    lalu resample NEAREST memakai warp yang sama seperti gambar. Untuk tiap ID yang
+    masih muncul di output, ambil min/max x,y -> bbox rectified. ID yang hilang
+    (ter-warp keluar frame) dibuang.
 
-    Return list (id_index, x1,y1,x2,y2) pixel pada gambar rectified.
+    Parameter opsional (default = perilaku lama persis):
+      masks : list poligon per-box (Nx2 piksel gambar asli). Bila masks[i] valid
+              (>=3 titik), objek dilukis via cv2.fillPoly (extent ketat mengikuti
+              bentuk ayam) alih-alih persegi penuh -> menghilangkan pelebaran akibat
+              rasterisasi persegi. masks[i] None/invalid -> fallback persegi.
+      dcomb/pad/out_hw : bila pad != (0,0), warp id_map ke kanvas diperbesar (out_hw)
+              via _resample_padded memakai peta gabungan dcomb (harus diberikan).
+              Default pad=(0,0) -> jalur _apply_full_warp dua-tahap eksak seperti dulu.
+
+    Return list (id_index, x1,y1,x2,y2) pixel pada gambar rectified (kanvas out_hw
+    bila padding aktif).
     """
     n = len(boxes)
     if n == 0:
         return []
-    # Peta ID: 0 = background, i+1 = box ke-i. Batas 255 id per gambar sudah cukup
-    # (float32 grid_sample nearest aman sampai ribuan; broiler padat < 300/gambar).
+    # Peta ID: 0 = background, i+1 = box ke-i. float32 grid_sample nearest aman sampai
+    # ribuan id (broiler padat < 300/gambar).
     id_map = np.zeros((ori_h, ori_w), dtype=np.float32)
     for i, (x1, y1, x2, y2) in enumerate(boxes):
+        poly = masks[i] if (masks is not None and i < len(masks)) else None
+        if poly is not None and len(poly) >= 3:
+            pts = np.asarray(poly, dtype=np.float32).reshape(-1, 2)
+            pts[:, 0] = np.clip(pts[:, 0], 0, ori_w - 1)
+            pts[:, 1] = np.clip(pts[:, 1], 0, ori_h - 1)
+            cv2.fillPoly(id_map, [pts.round().astype(np.int32)], float(i + 1))
+            continue
         xi1 = max(0, min(ori_w - 1, int(round(x1))))
         yi1 = max(0, min(ori_h - 1, int(round(y1))))
         xi2 = max(0, min(ori_w, int(round(x2))))
@@ -328,7 +445,12 @@ def warp_boxes_via_flow(boxes: np.ndarray, tps2flow: torch.Tensor, flow: torch.T
         id_map[yi1:yi2, xi1:xi2] = float(i + 1)
 
     id_t = torch.from_numpy(id_map)[None, None].to(device)  # 1,1,H,W
-    warped = _apply_full_warp(id_t, tps2flow, flow, mode="nearest")[0, 0]
+    if pad != (0, 0) and dcomb is not None:
+        ox, oy = pad
+        hp, wp = out_hw if out_hw is not None else (ori_h + 2 * oy, ori_w + 2 * ox)
+        warped = _resample_padded(id_t, dcomb, ox, oy, hp, wp, mode="nearest")[0, 0]
+    else:
+        warped = _apply_full_warp(id_t, tps2flow, flow, mode="nearest")[0, 0]
     warped_np = warped.round().cpu().numpy().astype(np.int32)
 
     out: List[Tuple[int, int, int, int, int]] = []
@@ -365,6 +487,43 @@ def read_yolo_labels(path: Path, img_w: int, img_h: int):
         classes.append(cls)
         rows.append((x1, y1, x2, y2))
     return classes, np.asarray(rows, dtype=np.float32) if rows else np.zeros((0, 4), dtype=np.float32)
+
+
+def read_yolo_polygons(path: Path, img_w: int, img_h: int):
+    """Baca .txt YOLO-seg -> (classes: List[int], polygons: List[np.ndarray (K,2) piksel]).
+
+    Format tiap baris: class x1 y1 x2 y2 ... xk yk (ternormalisasi 0-1, >=3 titik).
+    Baris dengan tepat 4 koordinat (2 titik) diperlakukan sebagai persegi 2-sudut ->
+    dikembangkan ke 4 sudut, agar file campuran bbox/seg tetap terbaca. Baris tak
+    valid (koordinat ganjil / < 2 titik) dilewati dengan poligon None pada indeksnya
+    TIDAK — poligon hanya ditambahkan untuk baris valid; penyelarasan ke box dilakukan
+    di pemanggil. Return classes & polygons sejajar (satu entri per baris valid).
+    """
+    classes: List[int] = []
+    polygons: List[np.ndarray] = []
+    if not path.exists():
+        return classes, polygons
+    for line in path.read_text(encoding="utf-8").splitlines():
+        parts = line.split()
+        if len(parts) < 5:
+            continue
+        try:
+            cls = int(float(parts[0]))
+            coords = [float(v) for v in parts[1:]]
+        except ValueError:
+            continue
+        if len(coords) % 2 != 0 or len(coords) < 4:
+            continue
+        pts = np.asarray(coords, dtype=np.float32).reshape(-1, 2)
+        if pts.shape[0] == 2:
+            # 2 titik -> persegi (x1,y1)-(x2,y2) diperluas ke 4 sudut.
+            (x1, y1), (x2, y2) = pts[0], pts[1]
+            pts = np.asarray([[x1, y1], [x2, y1], [x2, y2], [x1, y2]], dtype=np.float32)
+        pts[:, 0] *= img_w
+        pts[:, 1] *= img_h
+        classes.append(cls)
+        polygons.append(pts)
+    return classes, polygons
 
 
 def write_yolo_labels(path: Path, classes: List[int],
@@ -407,7 +566,27 @@ def main() -> int:
     ap.add_argument("--legacy", action="store_true",
                     help="Pakai build_model_test vendor (4 head, tanpa optimasi) untuk sanity-check.")
     ap.add_argument("--ext", default=".jpg", help="Ekstensi file output gambar (default .jpg).")
+    # --- Knob Lever A (perlemah/coarse/jaga-tepi) & Lever B (mask). Default = perilaku lama. ---
+    ap.add_argument("--coarse-only", action="store_true",
+                    help="Pakai TPS coarse saja (buang residual flow padat). Warp lebih mulus, "
+                         "distorsi lokal box berkurang.")
+    ap.add_argument("--warp-alpha", type=float, default=1.0,
+                    help="Skala kedua field perpindahan (1.0=penuh MOWA, 0=identitas). "
+                         "<1 memperlemah warp -> box tak melebar/terpotong sebanyak default.")
+    ap.add_argument("--pad-frac", type=float, default=0.0,
+                    help="Perbesar kanvas keluaran sebesar frac di tiap sisi (mis. 0.15) agar "
+                         "ayam/box di tepi tak ter-warp keluar frame lalu dibuang. 0 = tanpa padding.")
+    ap.add_argument("--seg-labels", type=Path, default=None,
+                    help="Folder label YOLO-seg (poligon) untuk warp bbox via mask ayam asli "
+                         "(Lever B), bukan rasterisasi persegi. Diselaraskan per-indeks ke --labels.")
     args = ap.parse_args()
+
+    if args.warp_alpha < 0:
+        print(f"ERROR: --warp-alpha harus >= 0 (diberi {args.warp_alpha})", file=sys.stderr)
+        return 2
+    if args.pad_frac < 0:
+        print(f"ERROR: --pad-frac harus >= 0 (diberi {args.pad_frac})", file=sys.stderr)
+        return 2
 
     if not args.input.is_dir():
         print(f"ERROR: --input bukan folder: {args.input}", file=sys.stderr)
@@ -455,6 +634,7 @@ def main() -> int:
 
     ok, failed = 0, 0
     boxes_in_total, boxes_out_total = 0, 0
+    seg_used, seg_mismatch = 0, 0
     fail_names: List[str] = []
     t0 = time.time()
     for i, img_path in enumerate(images, 1):
@@ -469,13 +649,29 @@ def main() -> int:
         src_lbl = (args.labels / (img_path.stem + ".txt")) if args.labels is not None else None
         classes: List[int] = []
         boxes = None
+        masks = None
         if do_warp:
             classes, boxes = read_yolo_labels(src_lbl, ori_w, ori_h)
+            # Lever B: muat poligon mask (bila --seg-labels) & selaraskan per-indeks ke boxes.
+            if args.seg_labels is not None and len(classes) > 0:
+                seg_path = args.seg_labels / (img_path.stem + ".txt")
+                _seg_cls, seg_polys = read_yolo_polygons(seg_path, ori_w, ori_h)
+                if len(seg_polys) == len(classes):
+                    masks = seg_polys
+                    seg_used += 1
+                else:
+                    # Jumlah tak cocok -> tak bisa dipetakan per-indeks; fallback persegi.
+                    seg_mismatch += 1
+                    if seg_mismatch <= 5:
+                        print(f"  [seg] {img_path.stem}: poligon={len(seg_polys)} != "
+                              f"box={len(classes)} -> fallback persegi", file=sys.stderr)
 
         try:
             rect, warped_boxes = rectify_one(
                 net, build_model_test, img, device, tps_points,
                 use_fp16=use_fp16, legacy=args.legacy, boxes=boxes, tps_cap=args.tps_cap,
+                warp_alpha=args.warp_alpha, coarse_only=args.coarse_only,
+                pad_frac=args.pad_frac, masks=masks,
             )
         except Exception as e:  # noqa: BLE001 — laporkan, lanjut gambar berikutnya
             failed += 1
@@ -485,12 +681,15 @@ def main() -> int:
 
         out_name = img_path.stem + args.ext
         cv2.imwrite(str(out_img_dir / out_name), rect)
+        # Normalisasi label memakai ukuran rect FINAL (penting saat --pad-frac memperbesar
+        # kanvas). Saat pad=0, rw,rh == ori_w,ori_h -> tak ada perubahan perilaku.
+        rh, rw = rect.shape[:2]
 
         if args.label_mode == "copy" and src_lbl is not None and src_lbl.exists():
             shutil.copy2(src_lbl, out_lbl_dir / (img_path.stem + ".txt"))
         elif do_warp:
             n_written = write_yolo_labels(
-                out_lbl_dir / (img_path.stem + ".txt"), classes, warped_boxes or [], ori_w, ori_h)
+                out_lbl_dir / (img_path.stem + ".txt"), classes, warped_boxes or [], rw, rh)
             boxes_in_total += len(classes)
             boxes_out_total += n_written
             if args.save_label_preview and warped_boxes:
@@ -525,6 +724,12 @@ def main() -> int:
         "label_mode": args.label_mode,
         "fp16": use_fp16,
         "legacy": args.legacy,
+        "coarse_only": args.coarse_only,
+        "warp_alpha": args.warp_alpha,
+        "pad_frac": args.pad_frac,
+        "seg_labels": str(args.seg_labels) if args.seg_labels else None,
+        "seg_images_used": seg_used,
+        "seg_mismatch_images": seg_mismatch,
         "total": len(images),
         "ok": ok,
         "failed": failed,
@@ -538,7 +743,11 @@ def main() -> int:
         "caveat": (
             "label-mode=warp: bbox ditransformasi via flow MOWA (instance-mask + nearest) "
             "sehingga selaras dengan gambar rectified; box yang ter-warp keluar frame dibuang. "
-            "label-mode=copy: label lama TIDAK selaras dengan geometri rectified."
+            "label-mode=copy: label lama TIDAK selaras dengan geometri rectified. "
+            "coarse_only/warp_alpha/pad_frac default (False/1.0/0.0) = perilaku warp penuh lama. "
+            "pad_frac>0: kanvas keluaran diperbesar & label dinormalisasi ke ukuran itu; jalur pad "
+            "memakai satu interpolasi gabungan (bukan dua tahap) — smoothing margin dapat diabaikan. "
+            "seg_labels: bbox dilukis via poligon SAM (bukan persegi) untuk extent lebih ketat."
         ),
     }
     (args.output / "mowa_rectify_manifest.json").write_text(

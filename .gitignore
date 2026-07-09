@@ -84,3 +84,6 @@ Thumbs.db
 /reports/bprime_full/*/
 /reports/_bprime_full.log
 !/reports/bprime_full/_summary.json
+
+# Paket rilis dataset rectified untuk dibagikan (1.3GB, jangan commit)
+/rilis_rectified_pio/
