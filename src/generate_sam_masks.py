@@ -23,9 +23,9 @@ Contoh pemakaian (dari root proyek, pakai venv YOLO yang ada ultralytics 8.4.84)
       --sam-model mobile_sam.pt \
       --device 0
 
-Semua dataset sekaligus (default), dengan chunking untuk gambar padat:
-  .venv-yolo/Scripts/python.exe src/generate_sam_masks.py \
-      --max-boxes-per-call 64 --half
+Semua dataset sekaligus (default; chunk 64 box/panggilan — WAJIB, MobileSAM
+ultralytics tak andal bila semua box dikirim sekaligus, mask bisa kosong):
+  .venv-yolo/Scripts/python.exe src/generate_sam_masks.py
 
 Struktur output:
   data/masks_seg/<dataset_id>/labels/<stem>.txt   poligon YOLO-seg (1 baris / box)
@@ -109,27 +109,22 @@ def _rect_polygon_norm(box_xyxy: np.ndarray, img_w: int, img_h: int) -> List[flo
     return out
 
 
-def _sam_polygon_norm(poly_norm: np.ndarray, img_w: int, img_h: int) -> Optional[List[float]]:
-    """Ubah poligon SAM (ternormalisasi Nx2) menjadi list flat ternormalisasi 0-1.
+def _sam_polygon_norm(poly_px: Optional[np.ndarray], img_w: int, img_h: int) -> Optional[List[float]]:
+    """Ubah poligon SAM (PIKSEL Nx2) menjadi list flat ternormalisasi 0-1.
 
-    - Konversi ke PIKSEL, sederhanakan via approxPolyDP ke <=64 titik.
+    - Sederhanakan via approxPolyDP ke <=64 titik bila terlalu banyak.
     - Butuh >=3 titik valid (sebelum & sesudah simplifikasi), else None (fallback).
     """
-    if poly_norm is None:
+    if poly_px is None:
         return None
-    arr = np.asarray(poly_norm, dtype=np.float32)
-    if arr.ndim != 2 or arr.shape[0] < 3 or arr.shape[1] != 2:
+    px = np.asarray(poly_px, dtype=np.float32)
+    if px.ndim != 2 or px.shape[0] < 3 or px.shape[1] != 2:
         return None
-    # Ke piksel.
-    px = arr.copy()
-    px[:, 0] *= img_w
-    px[:, 1] *= img_h
     # Sederhanakan bila titik banyak.
     if px.shape[0] > 64:
         contour = px.reshape(-1, 1, 2).astype(np.float32)
         eps = 0.01 * cv2.arcLength(contour, True)
-        approx = cv2.approxPolyDP(contour, eps, True)
-        approx = approx.reshape(-1, 2)
+        approx = cv2.approxPolyDP(contour, eps, True).reshape(-1, 2)
         if approx.shape[0] >= 3:
             px = approx.astype(np.float32)
         # kalau simplifikasi malah <3 titik, pakai px asli (masih >=3).
@@ -142,13 +137,33 @@ def _sam_polygon_norm(poly_norm: np.ndarray, img_w: int, img_h: int) -> Optional
     return out
 
 
-def _run_sam_on_boxes(sam, img_src, boxes_xyxy: np.ndarray, max_boxes_per_call: int,
-                      device: str, half: bool) -> Tuple[List[Optional[np.ndarray]], bool]:
-    """Jalankan SAM untuk semua box sebuah gambar, kembalikan poligon-ternormalisasi
-    (Nx2 atau None) per box, URUTAN sama dengan boxes_xyxy.
+def _contour_from_mask(mask_bool: np.ndarray) -> Optional[np.ndarray]:
+    """Ambil kontur poligon (Nx2 piksel) dari mask biner via findContours (kontur
+    terbesar). Return None bila tak ada kontur >=3 titik. Cadangan bila masks.xyn
+    kosong padahal masks.data berisi (terjadi pada sebagian versi ultralytics)."""
+    m = mask_bool.astype(np.uint8)
+    if m.sum() == 0:
+        return None
+    cnts, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        return None
+    c = max(cnts, key=cv2.contourArea).reshape(-1, 2).astype(np.float32)
+    return c if c.shape[0] >= 3 else None
 
-    Return (polys_norm, any_error). Bila SAM error / count mismatch untuk sebuah
-    chunk, seluruh box chunk itu diberi None (dipaksa fallback oleh pemanggil).
+
+def _run_sam_on_boxes(sam, img_src, boxes_xyxy: np.ndarray, max_boxes_per_call: int,
+                      device: str) -> Tuple[List[Optional[np.ndarray]], bool]:
+    """Jalankan SAM untuk semua box sebuah gambar, kembalikan poligon PIKSEL (Nx2 atau
+    None) per box, URUTAN sama dengan boxes_xyxy.
+
+    Return (polys_px, any_error). Bila SAM error / count mismatch untuk sebuah chunk,
+    seluruh box chunk itu diberi None (dipaksa fallback oleh pemanggil).
+
+    CATATAN penting (diverifikasi 2026-07-09): MobileSAM ultralytics 8.4.84
+    TIDAK ANDAL bila SEMUA box dikirim dalam satu panggilan besar (kadang seluruh
+    mask kosong). Chunk <=64 stabil 100%. Karena itu default max_boxes_per_call=64.
+    Param `half`/`quantize` di-DROP: usang & memicu mask kosong. Bila masks.xyn[k]
+    kosong padahal masks.data[k] berisi, kontur diambil manual dari masks.data.
     """
     n = int(boxes_xyxy.shape[0])
     polys: List[Optional[np.ndarray]] = [None] * n
@@ -167,16 +182,30 @@ def _run_sam_on_boxes(sam, img_src, boxes_xyxy: np.ndarray, max_boxes_per_call: 
         chunk_boxes = boxes_xyxy[start:end]
         expected = end - start
         try:
-            res = sam(img_src, bboxes=chunk_boxes.tolist(), verbose=False,
-                      device=device, half=half)
+            res = sam(img_src, bboxes=chunk_boxes.tolist(), verbose=False, device=device)
             masks = res[0].masks if res else None
-            xyn = masks.xyn if masks is not None else None
+            if masks is None:
+                any_error = True
+                continue
+            xyn = masks.xyn
+            data = masks.data  # (K,H,W) bool/float, koordinat PIKSEL untuk fallback kontur
             if xyn is None or len(xyn) != expected:
-                # Tidak bisa dipercaya alignmentnya -> fallback seluruh chunk.
+                # Alignment tak terpercaya -> fallback seluruh chunk.
                 any_error = True
                 continue
             for k in range(expected):
-                polys[start + k] = xyn[k]
+                pk = np.asarray(xyn[k], dtype=np.float32)
+                if pk.ndim == 2 and pk.shape[0] >= 3:
+                    # xyn ternormalisasi 0-1 -> ke piksel di pemanggil? tidak: simpan
+                    # sebagai piksel di sini agar seragam dgn cadangan kontur.
+                    ph, pw = data.shape[-2], data.shape[-1]
+                    px = pk.copy()
+                    px[:, 0] *= pw
+                    px[:, 1] *= ph
+                    polys[start + k] = px
+                elif k < data.shape[0]:
+                    polys[start + k] = _contour_from_mask(data[k].cpu().numpy())
+                # else tetap None -> fallback persegi oleh pemanggil
         except Exception as exc:  # noqa: BLE001
             any_error = True
             print(f"    [warn] SAM gagal untuk chunk box [{start}:{end}]: {exc}")
@@ -199,7 +228,7 @@ def _write_seg_labels(path: Path, classes: List[int], lines_coords: List[List[fl
 # Proses satu dataset.
 # ---------------------------------------------------------------------------
 def process_dataset(sam, ds: Dict, out_root: Path, limit: int,
-                    max_boxes_per_call: int, device: str, half: bool) -> Dict:
+                    max_boxes_per_call: int, device: str) -> Dict:
     ds_id = ds["id"]
     out_lbl_dir = out_root / ds_id / "labels"
     out_lbl_dir.mkdir(parents=True, exist_ok=True)
@@ -243,12 +272,12 @@ def process_dataset(sam, ds: Dict, out_root: Path, limit: int,
                 continue
             n_boxes += n
 
-            polys_norm, _err = _run_sam_on_boxes(
-                sam, str(img_path), boxes_xyxy, max_boxes_per_call, device, half)
+            polys_px, _err = _run_sam_on_boxes(
+                sam, str(img_path), boxes_xyxy, max_boxes_per_call, device)
 
             lines_coords: List[List[float]] = []
             for i in range(n):
-                coords = _sam_polygon_norm(polys_norm[i], img_w, img_h)
+                coords = _sam_polygon_norm(polys_px[i], img_w, img_h)
                 if coords is None:
                     coords = _rect_polygon_norm(boxes_xyxy[i], img_w, img_h)
                     n_fallback += 1
@@ -294,11 +323,10 @@ def main() -> int:
                         help="Bobot SAM ultralytics (auto-download saat pertama).")
     parser.add_argument("--device", type=str, default="0",
                         help="Device ultralytics (mis. '0' untuk GPU, 'cpu').")
-    parser.add_argument("--half", action="store_true",
-                        help="Inferensi fp16.")
-    parser.add_argument("--max-boxes-per-call", type=int, default=0,
-                        help="Chunk box per panggilan SAM (0 = semua sekaligus). "
-                             "Berguna untuk hindari OOM pada gambar padat.")
+    parser.add_argument("--max-boxes-per-call", type=int, default=64,
+                        help="Chunk box per panggilan SAM (default 64). MobileSAM "
+                             "ultralytics TIDAK ANDAL bila semua box dikirim sekaligus "
+                             "(mask bisa kosong); <=64 stabil. 0 = semua sekaligus (tak disarankan).")
     args = parser.parse_args()
 
     all_datasets = _build_datasets()
@@ -329,13 +357,12 @@ def main() -> int:
     manifests: List[Dict] = []
     for ds in datasets:
         m = process_dataset(sam, ds, out_root, args.limit,
-                            args.max_boxes_per_call, args.device, args.half)
+                            args.max_boxes_per_call, args.device)
         manifests.append(m)
 
     summary = {
         "sam_model": args.sam_model,
         "device": args.device,
-        "half": bool(args.half),
         "max_boxes_per_call": args.max_boxes_per_call,
         "limit": args.limit,
         "datasets": manifests,

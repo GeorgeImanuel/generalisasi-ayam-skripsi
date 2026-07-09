@@ -87,3 +87,12 @@ Thumbs.db
 
 # Paket rilis dataset rectified untuk dibagikan (1.3GB, jangan commit)
 /rilis_rectified_pio/
+
+# Varian MOWA soften/coarse/pad/mask (regenerasi via driver; berat, jangan commit)
+/data/rectified_coarse/
+/data/rectified_alpha05/
+/data/rectified_pad015/
+/data/rectified_coarse_sam/
+/data/masks_seg/
+/reports/_run_mowa_soften_campaign.py
+/reports/_soften_campaign.log
