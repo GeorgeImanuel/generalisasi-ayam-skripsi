@@ -200,57 +200,57 @@
       }
     },
     {
-      "name": "mowa_iter2",
+      "name": "mowa_coarse",
       "status": "ok",
       "source": "eval",
-      "note": "MOWA 2 pass iteratif (Unit 3). Skip bila dir belum ada.",
+      "note": "MOWA coarse-only (TPS, buang residual flow), bobot baseline.",
       "weights": "C:\\Arib\\MASSA AYAM\\generalisasi-ayam-skripsi\\train model\\runs_compare\\cmp_yolov8m\\weights\\best.pt",
-      "rectified_root": "C:\\Arib\\MASSA AYAM\\generalisasi-ayam-skripsi\\data\\rectified_iter2",
+      "rectified_root": "C:\\Arib\\MASSA AYAM\\generalisasi-ayam-skripsi\\data\\rectified_coarse",
       "datasets": {
         "pio_val": {
           "status": "ok",
           "images": 452,
-          "map50": 0.88507,
-          "map50_95": 0.60176,
-          "precision": 0.95157,
-          "recall": 0.8695
+          "map50": 0.89631,
+          "map50_95": 0.63537,
+          "precision": 0.96021,
+          "recall": 0.87529
         },
         "broiler_instance_seg": {
           "status": "ok",
           "images": 200,
-          "map50": 0.73211,
-          "map50_95": 0.39839,
-          "precision": 0.76245,
-          "recall": 0.6962
+          "map50": 0.78442,
+          "map50_95": 0.46699,
+          "precision": 0.79629,
+          "recall": 0.76105
         },
         "chicken_detection_fum": {
           "status": "ok",
           "images": 326,
-          "map50": 0.11697,
-          "map50_95": 0.04558,
-          "precision": 0.47513,
-          "recall": 0.13565
+          "map50": 0.12313,
+          "map50_95": 0.04898,
+          "precision": 0.52241,
+          "recall": 0.13795
         }
       },
       "verdict": {
         "per_dataset": [
           {
             "dataset": "pio_val",
-            "delta": -0.10848,
+            "delta": -0.07487,
             "label": "worse"
           },
           {
             "dataset": "broiler_instance_seg",
-            "delta": -0.13714,
+            "delta": -0.06854,
             "label": "worse"
           },
           {
             "dataset": "chicken_detection_fum",
-            "delta": -0.01265,
+            "delta": -0.00925,
             "label": "worse"
           }
         ],
-        "mean_delta_primary": -0.08609,
+        "mean_delta_primary": -0.05089,
         "overall": "worse",
         "n_better": 0,
         "n_worse": 3,
@@ -258,176 +258,176 @@
       }
     },
     {
-      "name": "enhanced",
+      "name": "mowa_alpha05",
       "status": "ok",
       "source": "eval",
-      "note": "CLAHE+unsharp preprocessing (Unit 4). Skip bila dir belum ada.",
+      "note": "MOWA warp-alpha=0.5 (perlemah warp), bobot baseline.",
       "weights": "C:\\Arib\\MASSA AYAM\\generalisasi-ayam-skripsi\\train model\\runs_compare\\cmp_yolov8m\\weights\\best.pt",
-      "rectified_root": "C:\\Arib\\MASSA AYAM\\generalisasi-ayam-skripsi\\data\\enhanced",
+      "rectified_root": "C:\\Arib\\MASSA AYAM\\generalisasi-ayam-skripsi\\data\\rectified_alpha05",
       "datasets": {
         "pio_val": {
           "status": "ok",
           "images": 452,
-          "map50": 0.88796,
-          "map50_95": 0.6274,
-          "precision": 0.95767,
-          "recall": 0.8704
+          "map50": 0.88921,
+          "map50_95": 0.66002,
+          "precision": 0.96065,
+          "recall": 0.8767
         },
         "broiler_instance_seg": {
           "status": "ok",
           "images": 200,
-          "map50": 0.73298,
-          "map50_95": 0.41774,
-          "precision": 0.7645,
-          "recall": 0.70389
+          "map50": 0.79163,
+          "map50_95": 0.47331,
+          "precision": 0.78914,
+          "recall": 0.7657
         },
         "chicken_detection_fum": {
           "status": "ok",
           "images": 326,
-          "map50": 0.12204,
-          "map50_95": 0.04812,
-          "precision": 0.50937,
-          "recall": 0.13805
+          "map50": 0.13047,
+          "map50_95": 0.0534,
+          "precision": 0.51467,
+          "recall": 0.14555
         }
       },
       "verdict": {
         "per_dataset": [
           {
             "dataset": "pio_val",
-            "delta": -0.08284,
+            "delta": -0.05022,
             "label": "worse"
           },
           {
             "dataset": "broiler_instance_seg",
-            "delta": -0.11779,
+            "delta": -0.06222,
             "label": "worse"
           },
           {
             "dataset": "chicken_detection_fum",
-            "delta": -0.01011,
-            "label": "worse"
-          }
-        ],
-        "mean_delta_primary": -0.07025,
-        "overall": "worse",
-        "n_better": 0,
-        "n_worse": 3,
-        "n_neutral": 0
-      }
-    },
-    {
-      "name": "tta",
-      "status": "ok",
-      "source": "merge",
-      "note": "TTA multi-scale+flip. Diproduksi eval_detection_tta.py, di-merge dari JSON.",
-      "weights": "C:\\Arib\\MASSA AYAM\\generalisasi-ayam-skripsi\\train model\\runs_compare\\cmp_yolov8m\\weights\\best.pt",
-      "rectified_root": null,
-      "datasets": {
-        "pio_val": {
-          "status": "ok",
-          "images": 452,
-          "map50": 0.8989,
-          "map50_95": 0.70757,
-          "precision": 0.95533,
-          "recall": 0.88131
-        },
-        "broiler_instance_seg": {
-          "status": "ok",
-          "images": 200,
-          "map50": 0.8812,
-          "map50_95": 0.64093,
-          "precision": 0.90438,
-          "recall": 0.81939
-        },
-        "chicken_detection_fum": {
-          "status": "ok",
-          "images": 326,
-          "map50": 0.13851,
-          "map50_95": 0.0601,
-          "precision": 0.56206,
-          "recall": 0.14853
-        }
-      },
-      "verdict": {
-        "per_dataset": [
-          {
-            "dataset": "pio_val",
-            "delta": -0.00267,
+            "delta": -0.00483,
             "label": "neutral"
+          }
+        ],
+        "mean_delta_primary": -0.03909,
+        "overall": "worse",
+        "n_better": 0,
+        "n_worse": 2,
+        "n_neutral": 1
+      }
+    },
+    {
+      "name": "mowa_pad015",
+      "status": "ok",
+      "source": "eval",
+      "note": "MOWA pad-frac=0.15 (jaga tepi, box tak dibuang), bobot baseline.",
+      "weights": "C:\\Arib\\MASSA AYAM\\generalisasi-ayam-skripsi\\train model\\runs_compare\\cmp_yolov8m\\weights\\best.pt",
+      "rectified_root": "C:\\Arib\\MASSA AYAM\\generalisasi-ayam-skripsi\\data\\rectified_pad015",
+      "datasets": {
+        "pio_val": {
+          "status": "ok",
+          "images": 452,
+          "map50": 0.88759,
+          "map50_95": 0.61464,
+          "precision": 0.95274,
+          "recall": 0.87541
+        },
+        "broiler_instance_seg": {
+          "status": "ok",
+          "images": 200,
+          "map50": 0.88412,
+          "map50_95": 0.59606,
+          "precision": 0.92633,
+          "recall": 0.85338
+        },
+        "chicken_detection_fum": {
+          "status": "ok",
+          "images": 326,
+          "map50": 0.12654,
+          "map50_95": 0.04958,
+          "precision": 0.51366,
+          "recall": 0.14174
+        }
+      },
+      "verdict": {
+        "per_dataset": [
+          {
+            "dataset": "pio_val",
+            "delta": -0.0956,
+            "label": "worse"
           },
           {
             "dataset": "broiler_instance_seg",
-            "delta": 0.1054,
+            "delta": 0.06053,
             "label": "better"
           },
           {
             "dataset": "chicken_detection_fum",
-            "delta": 0.00187,
-            "label": "neutral"
+            "delta": -0.00865,
+            "label": "worse"
           }
         ],
-        "mean_delta_primary": 0.03487,
-        "overall": "better",
+        "mean_delta_primary": -0.01457,
+        "overall": "worse",
         "n_better": 1,
-        "n_worse": 0,
-        "n_neutral": 2
+        "n_worse": 2,
+        "n_neutral": 0
       }
     },
     {
-      "name": "radial_retrain",
+      "name": "mowa_coarse_sam",
       "status": "ok",
       "source": "eval",
-      "note": "Retrain dengan augmentasi distorsi radial (Unit 7), gambar asli.",
-      "weights": "C:\\Arib\\MASSA AYAM\\generalisasi-ayam-skripsi\\train model\\runs_radial\\ft_radial_yolov8m\\weights\\best.pt",
-      "rectified_root": null,
+      "note": "MOWA coarse-only + label bbox via mask SAM (Lever B), bobot baseline.",
+      "weights": "C:\\Arib\\MASSA AYAM\\generalisasi-ayam-skripsi\\train model\\runs_compare\\cmp_yolov8m\\weights\\best.pt",
+      "rectified_root": "C:\\Arib\\MASSA AYAM\\generalisasi-ayam-skripsi\\data\\rectified_coarse_sam",
       "datasets": {
         "pio_val": {
           "status": "ok",
           "images": 452,
-          "map50": 0.89945,
-          "map50_95": 0.70388,
-          "precision": 0.95772,
-          "recall": 0.88707
+          "map50": 0.89827,
+          "map50_95": 0.55453,
+          "precision": 0.95946,
+          "recall": 0.88124
         },
         "broiler_instance_seg": {
           "status": "ok",
           "images": 200,
-          "map50": 0.88099,
-          "map50_95": 0.6075,
-          "precision": 0.9092,
-          "recall": 0.83699
+          "map50": 0.79265,
+          "map50_95": 0.49495,
+          "precision": 0.81114,
+          "recall": 0.75343
         },
         "chicken_detection_fum": {
           "status": "ok",
           "images": 326,
-          "map50": 0.13991,
-          "map50_95": 0.0653,
-          "precision": 0.49241,
-          "recall": 0.15548
+          "map50": 0.14201,
+          "map50_95": 0.08342,
+          "precision": 0.52558,
+          "recall": 0.15759
         }
       },
       "verdict": {
         "per_dataset": [
           {
             "dataset": "pio_val",
-            "delta": -0.00636,
+            "delta": -0.15571,
             "label": "worse"
           },
           {
             "dataset": "broiler_instance_seg",
-            "delta": 0.07197,
-            "label": "better"
+            "delta": -0.04058,
+            "label": "worse"
           },
           {
             "dataset": "chicken_detection_fum",
-            "delta": 0.00707,
+            "delta": 0.02519,
             "label": "better"
           }
         ],
-        "mean_delta_primary": 0.02423,
-        "overall": "better",
-        "n_better": 2,
-        "n_worse": 1,
+        "mean_delta_primary": -0.05703,
+        "overall": "worse",
+        "n_better": 1,
+        "n_worse": 2,
         "n_neutral": 0
       }
     }
