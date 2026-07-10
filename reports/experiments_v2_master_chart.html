@@ -74,6 +74,7 @@
   .bar { position: absolute; top: 5px; height: 20px; border-radius: 4px; }
   .bar.better { background: var(--better); }
   .bar.worse  { background: var(--worse); }
+  .bar.neutral { background: var(--baseline); }
   .bar.zero-bar { background: var(--baseline); }
   .barval { position: absolute; top: 6px; font-size: 12px; font-weight: 600;
     font-variant-numeric: tabular-nums; color: var(--text-primary);
@@ -97,6 +98,7 @@
     display: inline-flex; align-items: center; gap: 4px; }
   .pill.better { color: var(--good-ink); background: color-mix(in srgb, var(--better) 15%, transparent); }
   .pill.worse  { color: var(--crit-ink); background: color-mix(in srgb, var(--worse) 15%, transparent); }
+  .pill.neutral{ color: var(--text-secondary); background: color-mix(in srgb, var(--baseline) 40%, transparent); }
   .pill.base   { color: var(--text-secondary); background: color-mix(in srgb, var(--baseline) 30%, transparent); }
   table.data { border-collapse: collapse; width: 100%; font-size: 12.5px; }
   table.data th, table.data td { padding: 8px 10px; text-align: right;
@@ -138,7 +140,9 @@
     <h2>Δ mAP50-95 per dataset (matriks)</h2>
     <p class="sub" style="margin-bottom:14px">Warna = besar &amp; arah Δ vs baseline per dataset. Sorotan: <b>TTA</b> dan
       <b>augmentasi radial + retrain</b> yang biru (menang) — keduanya tanpa rektifikasi MOWA, dengan lonjakan
-      besar di broiler (TTA +0.105, radial +0.072). Semua varian berbasis MOWA merah (kalah).</p>
+      besar di broiler (TTA +0.105, radial +0.072). Varian MOWA terbaik, <b>MOWA pad + fine-tune ★</b>,
+      kini praktis <b>menyamai baseline</b> (mean Δ −0.001, netral) dan bahkan <b>menang di broiler (+0.037)</b> —
+      lompatan besar dari varian MOWA sebelumnya, meski secara keseluruhan belum melampaui baseline.</p>
     <div id="heat"></div>
     <p class="foot">Nilai = Δ absolut mAP50-95 (varian − baseline). Baris baseline semuanya 0 (acuan).</p>
   </div>
@@ -147,7 +151,8 @@
     <h2>Tabel data (mAP50-95 absolut + verdict)</h2>
     <table class="data" id="datatable"></table>
     <p class="foot">Sumber: <code>reports/experiments_v2_master.json</code> +
-      <code>reports/eval_enhanced_orig.json</code>. Dijalankan 2026-07-05, YOLOv8m, imgsz 960, RTX 4060.</p>
+      <code>reports/eval_enhanced_orig.json</code> + <code>reports/eval_pad015_ft.json</code>.
+      Diperbarui 2026-07-10 (varian MOWA pad + fine-tune), YOLOv8m, imgsz 960, RTX 4060.</p>
   </div>
 
 </div>
@@ -166,7 +171,8 @@ const V = [
   {name:'baseline',                 lab:'Baseline',           tag:'gambar asli',              abs:{pio_val:0.71024,broiler_instance_seg:0.53553,chicken_detection_fum:0.05823}, mean:0.0,     verdict:'base'},
   {name:'tta',                      lab:'TTA (multi-scale+flip)', tag:'tanpa MOWA, tanpa retrain', abs:{pio_val:0.7076,broiler_instance_seg:0.6409,chicken_detection_fum:0.0601}, mean:0.03487, verdict:'better'},
   {name:'radial_retrain',           lab:'Augmentasi radial + retrain', tag:'adapt detektor, tanpa MOWA', abs:{pio_val:0.7039,broiler_instance_seg:0.6075,chicken_detection_fum:0.0653}, mean:0.02423, verdict:'better'},
-  {name:'mowa_1pass_ft',            lab:'MOWA + fine-tune',   tag:'rectify-both',             abs:{pio_val:0.6833,broiler_instance_seg:0.5298,chicken_detection_fum:0.0582}, mean:-0.01087, verdict:'worse'},
+  {name:'mowa_pad015_ft',           lab:'MOWA pad + fine-tune ★', tag:'jaga tepi + rectify-both (BARU)', abs:{pio_val:0.6715,broiler_instance_seg:0.5720,chicken_detection_fum:0.0573}, mean:-0.00107, verdict:'neutral'},
+  {name:'mowa_1pass_ft',            lab:'MOWA + fine-tune',   tag:'rectify-both (full-warp)', abs:{pio_val:0.6833,broiler_instance_seg:0.5298,chicken_detection_fum:0.0582}, mean:-0.01087, verdict:'worse'},
   {name:'enhanced_orig',            lab:'CLAHE+unsharp saja', tag:'tanpa MOWA',               abs:{pio_val:0.6901,broiler_instance_seg:0.4705,chicken_detection_fum:0.0562}, mean:-0.02905, verdict:'worse'},
   {name:'mowa_1pass',               lab:'MOWA 1-pass',        tag:'bobot baseline',           abs:{pio_val:0.6383,broiler_instance_seg:0.4565,chicken_detection_fum:0.0491}, mean:-0.05338, verdict:'worse'},
   {name:'enhanced',                 lab:'MOWA + CLAHE+unsharp', tag:'di atas MOWA',           abs:{pio_val:0.6274,broiler_instance_seg:0.4177,chicken_detection_fum:0.0481}, mean:-0.07025, verdict:'worse'},
@@ -201,7 +207,7 @@ function hideTip(){ tt.style.opacity=0; }
       val.style.color='var(--text-muted)'; track.appendChild(val);
     } else {
       const bar=document.createElement('div');
-      bar.className='bar '+(v.mean>0?'better':'worse');
+      bar.className='bar '+(v.verdict==='neutral'?'neutral':(v.mean>0?'better':'worse'));
       if(v.mean>0){ bar.style.left=midPct+'%'; bar.style.width=w+'%'; }
       else { bar.style.left=(midPct-w)+'%'; bar.style.width=w+'%'; }
       track.appendChild(bar);
@@ -276,6 +282,7 @@ function heatColor(d){
     const tr=document.createElement('tr'); if(v.verdict==='better') tr.className='win';
     const pill = v.verdict==='better'?'<span class="pill better">▲ better</span>'
               : v.verdict==='worse'?'<span class="pill worse">▼ worse</span>'
+              : v.verdict==='neutral'?'<span class="pill neutral">≈ netral</span>'
               : '<span class="pill base">acuan</span>';
     tr.innerHTML=`<td class="name">${v.lab}</td>`+
       DS.map(d=>`<td>${v.abs[d.id].toFixed(4)}</td>`).join('')+
