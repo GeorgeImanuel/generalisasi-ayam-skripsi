@@ -167,6 +167,15 @@ def build_variants(weights_baseline: Path, weights_ft: Path) -> List[Dict]:
             "merge_default": None,
             "note": "MOWA coarse-only + label bbox via mask SAM (Lever B), bobot baseline.",
         },
+        {
+            # Pemenang screening di-RETRAIN rectify-both 40 epoch (kondisi B'-pad).
+            "name": "mowa_pad015_ft",
+            "source": "eval",
+            "weights": ROOT / "train model" / "runs_pad015" / "ft_pad015_yolov8m" / "weights" / "best.pt",
+            "rectified_root": ROOT / "data" / "rectified_pad015",
+            "merge_default": None,
+            "note": "MOWA pad-frac=0.15 + fine-tune-on-rectified 40ep (rectify-both, jaga tepi).",
+        },
     ]
 
 
