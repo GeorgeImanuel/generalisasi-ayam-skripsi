@@ -1,3 +1,16 @@
+# ===== Release bundles & secrets (GitHub-pro setup) =====
+# Built Google-Drive asset zips (14GB). Produced by scripts/build_release_bundles.py.
+/dist/
+# Local secrets (Roboflow key, etc.) — copy .env.example -> .env
+.env
+# Large share zips staged at the repo root (uploaded to Drive, not committed)
+/rilis_rectified_pio.zip
+/reports/bprime_full.zip
+# Scratch logs from the release build / master reruns
+/reports/_build_bundles.log
+/reports/_master_rerun.log
+/reports/_master_rerun.err
+
 # ===== Dataset & hasil besar (tidak untuk git) =====
 /data/
 /train model/
@@ -77,8 +90,8 @@ Thumbs.db
 /reports/_roundtrip_full.log
 /reports/_chart_v3.png
 
-# Node deps untuk build deck (regenerasi via npm install)
-/presentasi/node_modules/
+# Slide deck / presentation (excluded from the public repo)
+/presentasi/
 
 # Gambar B fine-tune full-res (regenerasi via render_bprime_full.py); simpan hanya summary
 /reports/bprime_full/*/
@@ -96,3 +109,8 @@ Thumbs.db
 /data/masks_seg/
 /reports/_run_mowa_soften_campaign.py
 /reports/_soften_campaign.log
+/reports/_soften_campaign.err
+/reports/_run_pad015_retrain.py
+/reports/_pad015_retrain.log
+/reports/_pad015_retrain.err
+/train model/runs_pad015/
